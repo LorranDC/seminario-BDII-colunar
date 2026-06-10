@@ -1,0 +1,1571 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SGBD: Linear vs Colunar</title>
+    <style>
+      :root {
+        --bg: #080a0f;
+        --panel: #151923;
+        --panel2: #202634;
+        --line: #333b4f;
+        --text: #f7f8fb;
+        --muted: #a3aab8;
+        --row: #06b6d4;
+        --col: #a855f7;
+        --read: #facc15;
+        --write: #60a5fa;
+        --keep: #22c55e;
+        --bad: #ef4444;
+        --skip: #4b5563;
+        --jump: #fb923c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(
+            circle at 10% 0%,
+            rgba(6, 182, 212, 0.18),
+            transparent 32rem
+          ),
+          radial-gradient(
+            circle at 88% 0%,
+            rgba(168, 85, 247, 0.18),
+            transparent 32rem
+          ),
+          var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(1240px, calc(100vw - 28px));
+        margin: 0 auto;
+        padding: 20px 0 34px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: clamp(2rem, 5vw, 3.7rem);
+        line-height: 1;
+      }
+
+      .lead {
+        margin: 0;
+        max-width: 980px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr) 118px 118px;
+        gap: 8px;
+        margin: 16px 0 14px;
+      }
+
+      button {
+        min-height: 50px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 9px 11px;
+        cursor: pointer;
+        font: inherit;
+        text-align: left;
+      }
+
+      button:hover {
+        background: var(--panel2);
+      }
+      button.active {
+        border-color: var(--read);
+        box-shadow: inset 0 0 0 1px rgba(250, 204, 21, 0.55);
+      }
+      button strong {
+        display: block;
+        font-size: 0.9rem;
+      }
+      button span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.74rem;
+        margin-top: 2px;
+      }
+      .run {
+        background: #15803d;
+        border-color: #22c55e;
+        text-align: center;
+        font-weight: 900;
+      }
+      .reset {
+        text-align: center;
+        font-weight: 900;
+      }
+
+      .progress {
+        height: 10px;
+        border-radius: 999px;
+        background: #222838;
+        overflow: hidden;
+        margin-bottom: 14px;
+      }
+
+      .bar {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, var(--read), var(--jump));
+        transition: width 0.25s ease;
+      }
+
+      .engine {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .phase {
+        min-height: 74px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: rgba(21, 25, 35, 0.9);
+        padding: 10px;
+        transition:
+          border-color 0.25s ease,
+          background 0.25s ease,
+          transform 0.25s ease,
+          box-shadow 0.25s ease;
+      }
+
+      .phase b {
+        display: block;
+        font-size: 0.86rem;
+      }
+      .phase small {
+        display: block;
+        color: var(--muted);
+        font-size: 0.72rem;
+        margin-top: 4px;
+        line-height: 1.28;
+      }
+      .phase.active {
+        border-color: var(--read);
+        background: rgba(250, 204, 21, 0.12);
+        transform: translateY(-2px);
+        box-shadow: 0 0 30px rgba(250, 204, 21, 0.18);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 340px;
+        gap: 14px;
+        align-items: stretch;
+      }
+
+      .board,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(21, 25, 35, 0.92);
+      }
+
+      .board {
+        min-height: 502px;
+        padding: 16px;
+        overflow: hidden;
+      }
+
+      .board h2 {
+        margin: 0 0 4px;
+        font-size: 1.25rem;
+      }
+      .board p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.35;
+      }
+      .row-title {
+        color: var(--row);
+      }
+      .col-title {
+        color: var(--col);
+      }
+
+      .meta-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin: 14px 0 12px;
+      }
+
+      .meta {
+        min-height: 56px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0d1119;
+        padding: 8px;
+        transition: all 0.24s ease;
+      }
+
+      .meta b {
+        display: block;
+        font-size: 0.78rem;
+      }
+      .meta small {
+        display: block;
+        color: var(--muted);
+        font-size: 0.7rem;
+        margin-top: 3px;
+      }
+      .meta.active {
+        border-color: var(--write);
+        background: rgba(96, 165, 250, 0.14);
+        box-shadow: 0 0 24px rgba(96, 165, 250, 0.2);
+      }
+
+      .headers,
+      .row-record,
+      .columns {
+        display: grid;
+        grid-template-columns: 0.68fr 1.2fr 0.82fr 1.1fr;
+        gap: 8px;
+      }
+
+      .headers {
+        color: #758094;
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        margin-bottom: 8px;
+      }
+
+      .row-list,
+      .column-file {
+        display: grid;
+        gap: 8px;
+      }
+
+      .cell {
+        height: 43px;
+        display: grid;
+        place-items: center;
+        border: 1px solid #343d50;
+        border-radius: 9px;
+        background: #242a37;
+        color: var(--text);
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 0.9rem;
+        transition:
+          background 0.28s ease,
+          color 0.2s ease,
+          opacity 0.2s ease,
+          transform 0.28s ease,
+          box-shadow 0.28s ease;
+      }
+
+      .cell.scan {
+        background: var(--read);
+        color: #111;
+        transform: scale(1.08);
+        box-shadow:
+          0 0 0 5px rgba(250, 204, 21, 0.16),
+          0 0 32px rgba(250, 204, 21, 0.55);
+        z-index: 4;
+      }
+
+      .cell.write {
+        background: var(--write);
+        color: #fff;
+        transform: scale(1.08);
+        box-shadow:
+          0 0 0 5px rgba(96, 165, 250, 0.16),
+          0 0 32px rgba(96, 165, 250, 0.55);
+      }
+
+      .cell.keep {
+        background: var(--keep);
+        color: #fff;
+        font-weight: 900;
+      }
+      .cell.skip {
+        background: #1b2230;
+        color: #667085;
+        opacity: 0.65;
+      }
+      .cell.delete {
+        background: var(--bad);
+        color: #fff;
+        text-decoration: line-through;
+      }
+
+      .hud {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0c1018;
+        padding: 8px;
+      }
+
+      .metric b {
+        display: block;
+        font-size: 1.35rem;
+        line-height: 1;
+      }
+      .metric small {
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+
+      .result {
+        min-height: 66px;
+        margin-top: 12px;
+        padding: 11px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0c1018;
+        color: #d7dce8;
+        line-height: 1.35;
+        font-size: 0.9rem;
+      }
+
+      .panel {
+        padding: 14px;
+      }
+
+      .side-logs {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 14px;
+        min-height: 502px;
+      }
+
+      .panel h3 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+      }
+      .log {
+        display: grid;
+        gap: 7px;
+        max-height: 390px;
+        overflow: auto;
+        padding-right: 4px;
+      }
+
+      .log-line {
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 9px;
+        align-items: start;
+        padding: 9px;
+        border: 1px solid rgba(250, 204, 21, 0.16);
+        border-radius: 8px;
+        background: rgba(12, 16, 24, 0.72);
+        color: #eef2ff;
+        font-size: 0.9rem;
+        line-height: 1.35;
+      }
+
+      .log-line span {
+        color: #81899a;
+        font-family: "Cascadia Mono", Consolas, monospace;
+      }
+
+      .current {
+        min-height: 132px;
+        border: 1px solid var(--read);
+        background: linear-gradient(
+          180deg,
+          rgba(250, 204, 21, 0.14),
+          rgba(12, 16, 24, 0.88)
+        );
+        border-radius: 9px;
+        padding: 14px;
+        color: #fff;
+        line-height: 1.45;
+        font-size: 1rem;
+        box-shadow: 0 0 28px rgba(250, 204, 21, 0.12);
+      }
+
+      .scanner {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 30px;
+        height: 30px;
+        margin: -15px 0 0 -15px;
+        border-radius: 999px;
+        pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(
+          circle at center,
+          #0b0f18 0 38%,
+          #fff 39% 52%,
+          var(--read) 53% 100%
+        );
+        border: 2px solid #0b0f18;
+        box-shadow:
+          0 0 0 5px rgba(8, 10, 15, 0.84),
+          0 0 0 10px rgba(250, 204, 21, 0.24),
+          0 0 42px rgba(250, 204, 21, 0.78);
+        z-index: 40;
+      }
+
+      .scanner::after {
+        content: attr(data-label);
+        position: absolute;
+        left: 50%;
+        top: -28px;
+        transform: translateX(-50%);
+        padding: 4px 8px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 999px;
+        background: rgba(8, 10, 15, 0.94);
+        color: #fff;
+        font-size: 10.5px;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+      }
+
+      .scanner.write {
+        background: radial-gradient(
+          circle at center,
+          #0b0f18 0 38%,
+          #fff 39% 52%,
+          var(--write) 53% 100%
+        );
+        box-shadow:
+          0 0 0 5px rgba(8, 10, 15, 0.84),
+          0 0 0 10px rgba(96, 165, 250, 0.24),
+          0 0 42px rgba(96, 165, 250, 0.78);
+      }
+
+      .scanner.move {
+        background: radial-gradient(
+          circle at center,
+          #0b0f18 0 38%,
+          #fff 39% 52%,
+          var(--row) 53% 100%
+        );
+        box-shadow:
+          0 0 0 5px rgba(8, 10, 15, 0.84),
+          0 0 0 10px rgba(6, 182, 212, 0.24),
+          0 0 42px rgba(6, 182, 212, 0.72);
+      }
+
+      .scanner.use {
+        background: radial-gradient(
+          circle at center,
+          #0b0f18 0 38%,
+          #fff 39% 52%,
+          var(--keep) 53% 100%
+        );
+        box-shadow:
+          0 0 0 5px rgba(8, 10, 15, 0.84),
+          0 0 0 10px rgba(34, 197, 94, 0.24),
+          0 0 42px rgba(34, 197, 94, 0.72);
+      }
+
+      .scanner.skip {
+        background: radial-gradient(
+          circle at center,
+          #0b0f18 0 38%,
+          #fff 39% 52%,
+          #94a3b8 53% 100%
+        );
+        box-shadow:
+          0 0 0 5px rgba(8, 10, 15, 0.84),
+          0 0 0 10px rgba(148, 163, 184, 0.18),
+          0 0 32px rgba(148, 163, 184, 0.46);
+      }
+
+      .scanner.delete {
+        background: radial-gradient(
+          circle at center,
+          #0b0f18 0 38%,
+          #fff 39% 52%,
+          var(--bad) 53% 100%
+        );
+        box-shadow:
+          0 0 0 5px rgba(8, 10, 15, 0.84),
+          0 0 0 10px rgba(239, 68, 68, 0.24),
+          0 0 42px rgba(239, 68, 68, 0.72);
+      }
+
+      .scanner.jump {
+        background: radial-gradient(
+          circle at center,
+          #0b0f18 0 38%,
+          #fff 39% 52%,
+          var(--jump) 53% 100%
+        );
+        box-shadow:
+          0 0 0 5px rgba(8, 10, 15, 0.84),
+          0 0 0 10px rgba(251, 146, 60, 0.26),
+          0 0 42px rgba(251, 146, 60, 0.82);
+      }
+
+      .trail {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 9px;
+        height: 9px;
+        margin: -4px 0 0 -4px;
+        border-radius: 999px;
+        pointer-events: none;
+        background: var(--read);
+        animation: fade 0.55s ease forwards;
+        z-index: 38;
+      }
+
+      @keyframes fade {
+        to {
+          opacity: 0;
+          transform: scale(0.2);
+        }
+      }
+
+      @media (max-width: 1050px) {
+        .controls,
+        .engine,
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+        .side-logs {
+          min-height: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>SGBD: Linear vs Colunar</h1>
+        <!-- <p class="lead">
+          Simulacao didatica do caminho que um SGBD normalmente percorre. O fluxo e fiel aos conceitos de execucao, mas bancos reais variam por engine, indice, cache, MVCC, compressao e formato de armazenamento.
+        </p> -->
+      </header>
+
+      <section class="controls" id="controls"></section>
+      <div class="progress"><div class="bar" id="bar"></div></div>
+      <section class="engine" id="engine"></section>
+
+      <section class="workspace">
+        <article class="board">
+          <h2 class="row-title">Row-store / linear por linhas</h2>
+          <p>
+            Uma pagina contem registros completos. Bom quando a consulta precisa
+            da linha inteira.
+          </p>
+          <div class="meta-row" id="rowMeta"></div>
+          <div class="headers">
+            <span>ID</span><span>NOME</span><span>IDADE</span
+            ><span>CIDADE</span>
+          </div>
+          <div class="row-list" id="rowStore"></div>
+          <div class="hud" id="rowHud"></div>
+          <div class="result" id="rowResult">Aguardando simulacao.</div>
+        </article>
+
+        <article class="board">
+          <h2 class="col-title">Column-store / colunar</h2>
+          <p>
+            Cada coluna tem segmentos proprios. Bom quando a consulta usa poucas
+            colunas de muitas linhas.
+          </p>
+          <div class="meta-row" id="colMeta"></div>
+          <div class="headers">
+            <span>ID</span><span>NOME</span><span>IDADE</span
+            ><span>CIDADE</span>
+          </div>
+          <div class="columns" id="colStore"></div>
+          <div class="hud" id="colHud"></div>
+          <div class="result" id="colResult">Aguardando simulacao.</div>
+        </article>
+        <aside class="side-logs">
+          <article class="panel">
+            <h3>Passo atual</h3>
+            <div class="current" id="current">
+              Escolha uma operacao e clique em Simular.
+            </div>
+          </article>
+          <article class="panel">
+            <h3>Historico detalhado</h3>
+            <div class="log" id="log"></div>
+          </article>
+        </aside>
+      </section>
+    </main>
+    <div class="scanner" id="scanner"></div>
+
+    <script>
+      const rowsBase = [
+        { id: 1, nome: "Alice", idade: 25, cidade: "Recife" },
+        { id: 2, nome: "Bruno", idade: 30, cidade: "Curitiba" },
+        { id: 3, nome: "Carla", idade: 22, cidade: "Natal" },
+        { id: 4, nome: "Diego", idade: 35, cidade: "Manaus" },
+      ];
+
+      const fields = ["id", "nome", "idade", "cidade"];
+      const labels = {
+        id: "ID",
+        nome: "NOME",
+        idade: "IDADE",
+        cidade: "CIDADE",
+      };
+      const phases = [
+        ["client", "Cliente SQL", "A aplicacao envia o comando."],
+        ["parser", "Parser/Binder", "Valida sintaxe, nomes e tipos."],
+        ["txn", "Transacao/MVCC", "Define snapshot, locks e visibilidade."],
+        ["optimizer", "Otimizador", "Escolhe o plano fisico."],
+        ["executor", "Executor", "Executa operadores do plano."],
+        ["buffer", "Buffer pool", "Procura paginas em memoria."],
+        ["storage", "Storage", "Le ou escreve paginas/segmentos."],
+        ["wal", "WAL/Commit", "Garante durabilidade quando escreve."],
+      ];
+      const ops = {
+        aggregate: ["Media de idade", "SELECT AVG(idade)"],
+        record: ["Abrir registro", "SELECT * WHERE id=3"],
+        insert: ["Inserir linha", "INSERT Eva"],
+        update: ["Atualizar idade", "UPDATE id=2"],
+        delete: ["Deletar registro", "DELETE id=4"],
+      };
+      const summaries = {
+        aggregate: [
+          "Row-store: o executor varre paginas de linhas e descarta colunas que nao participam da agregacao.",
+          "Column-store: o executor acessa so o segmento idade, aplica descompressao/vetoriza e agrega menos dados.",
+        ],
+        record: [
+          "Row-store: o indice localiza a tupla; a pagina traz o registro completo de uma vez.",
+          "Column-store: depois de localizar o row-id, o executor precisa buscar o valor correspondente em cada segmento.",
+        ],
+        insert: [
+          "Row-store: monta a tupla completa, registra WAL e insere em uma pagina de dados.",
+          "Column-store: registra WAL e escreve cada atributo no segmento da sua coluna; normalmente ha delta-store/buffer de escrita.",
+        ],
+        update: [
+          "Row-store: localiza a tupla, grava WAL e altera a versao/valor dentro da pagina da linha.",
+          "Column-store: localiza a posicao, grava WAL e atualiza segmento/delta da coluna idade; outras colunas nao sao tocadas.",
+        ],
+        delete: [
+          "Row-store: localiza a tupla, grava WAL e marca a linha como apagada ou cria versao invisivel.",
+          "Column-store: marca a posicao como removida em delete bitmap/visibilidade, mantendo segmentos sincronizados.",
+        ],
+      };
+
+      const SPEED = 1.65;
+      let selected = "aggregate";
+      let rows = [...rowsBase];
+      let running = false;
+      let stats = emptyStats();
+      let scannerPosition = null;
+
+      const $ = (id) => document.getElementById(id);
+      const wait = (ms) =>
+        new Promise((resolve) => setTimeout(resolve, ms * SPEED));
+
+      function emptyStats() {
+        return {
+          row: { reads: 0, writes: 0, jumps: 0, wal: 0 },
+          col: { reads: 0, writes: 0, jumps: 0, wal: 0 },
+        };
+      }
+
+      function renderControls() {
+        $("controls").innerHTML =
+          Object.entries(ops)
+            .map(
+              ([key, [title, sql]]) => `
+          <button class="${key === selected ? "active" : ""}" data-op="${key}">
+            <strong>${title}</strong><span>${sql}</span>
+          </button>
+        `,
+            )
+            .join("") +
+          `
+          <button class="run" id="run">Simular</button>
+          <button class="reset" id="reset">Resetar</button>
+        `;
+        document.querySelectorAll("[data-op]").forEach((button) => {
+          button.onclick = () => {
+            if (running) return;
+            selected = button.dataset.op;
+            reset();
+          };
+        });
+        $("run").onclick = run;
+        $("reset").onclick = reset;
+      }
+
+      function renderEngine() {
+        $("engine").innerHTML = phases
+          .map(
+            ([key, title, desc]) => `
+          <div class="phase" id="phase-${key}">
+            <b>${title}</b><small>${desc}</small>
+          </div>
+        `,
+          )
+          .join("");
+      }
+
+      function renderStores() {
+        $("rowStore").innerHTML = rows
+          .map(
+            (row, r) => `
+          <div class="row-record">${fields.map((f) => `<div class="cell" id="R-${r}-${f}">${row[f]}</div>`).join("")}</div>
+        `,
+          )
+          .join("");
+        $("colStore").innerHTML = fields
+          .map(
+            (f) => `
+          <div class="column-file">${rows.map((row, r) => `<div class="cell" id="C-${r}-${f}">${row[f]}</div>`).join("")}</div>
+        `,
+          )
+          .join("");
+      }
+
+      function renderMeta() {
+        const rowItems = [
+          ["catalog", "Catalogo", "Tabela clientes"],
+          ["index", "Indice B-tree", "id -> pagina"],
+          ["buffer", "Pagina 8 KB", "tuplas completas"],
+          ["wal", "WAL", "log antes da escrita"],
+        ];
+        const colItems = [
+          ["catalog", "Catalogo", "Tabela clientes"],
+          ["zone", "Zone map", "min/max por segmento"],
+          ["buffer", "Segmento", "vetor por coluna"],
+          ["wal", "WAL/Delta", "log + buffer de escrita"],
+        ];
+        $("rowMeta").innerHTML = rowItems
+          .map(([key, title, desc]) => metaHtml("row", key, title, desc))
+          .join("");
+        $("colMeta").innerHTML = colItems
+          .map(([key, title, desc]) => metaHtml("col", key, title, desc))
+          .join("");
+      }
+
+      function metaHtml(side, key, title, desc) {
+        return `<div class="meta" id="${side}-meta-${key}"><b>${title}</b><small>${desc}</small></div>`;
+      }
+
+      function renderHud() {
+        for (const side of ["row", "col"]) {
+          $(`${side}Hud`).innerHTML = `
+            <div class="metric"><b>${stats[side].reads}</b><small>leituras</small></div>
+            <div class="metric"><b>${stats[side].writes}</b><small>escritas</small></div>
+            <div class="metric"><b>${stats[side].jumps}</b><small>saltos</small></div>
+            <div class="metric"><b>${stats[side].wal}</b><small>WAL</small></div>
+          `;
+        }
+      }
+
+      function reset() {
+        running = false;
+        rows = [...rowsBase];
+        stats = emptyStats();
+        $("bar").style.width = "0%";
+        $("current").textContent = "Escolha uma operacao e clique em Simular.";
+        $("log").innerHTML = "";
+        $("rowResult").textContent = "Aguardando simulacao.";
+        $("colResult").textContent = "Aguardando simulacao.";
+        $("scanner").style.opacity = 0;
+        scannerPosition = null;
+        renderControls();
+        renderEngine();
+        renderMeta();
+        renderStores();
+        renderHud();
+      }
+
+      function cell(side, row, field) {
+        return $(`${side === "row" ? "R" : "C"}-${row}-${field}`);
+      }
+
+      function clearHighlights() {
+        document
+          .querySelectorAll(".phase, .meta")
+          .forEach((el) => el.classList.remove("active"));
+        document
+          .querySelectorAll(".cell")
+          .forEach((el) => (el.className = "cell"));
+      }
+
+      function activatePhase(phase) {
+        document
+          .querySelectorAll(".phase")
+          .forEach((el) => el.classList.remove("active"));
+        if (phase) $(`phase-${phase}`)?.classList.add("active");
+      }
+
+      function activateMeta(side, key) {
+        document
+          .querySelectorAll(".meta")
+          .forEach((el) => el.classList.remove("active"));
+        if (side && key) $(`${side}-meta-${key}`)?.classList.add("active");
+      }
+
+      function addLog(side, text) {
+        const line = document.createElement("div");
+        line.className = "log-line";
+        line.innerHTML = `<span>${side}</span><div>${text}</div>`;
+        $("log").append(line);
+        $("log").scrollTop = $("log").scrollHeight;
+        $("current").textContent = `${side}: ${text}`;
+      }
+
+      function scannerVisualForState(state) {
+        const modes = {
+          scan: ["", "LER DADO"],
+          write: ["write", "ESCREVER"],
+          delete: ["delete", "APAGAR"],
+          keep: ["use", "USAR DADO"],
+          skip: ["skip", "IGNORAR"],
+        };
+        return modes[state] || ["", "LER DADO"];
+      }
+
+      function trailColorForClass(className) {
+        if (className.includes("jump")) return "var(--jump)";
+        if (className.includes("write")) return "var(--write)";
+        if (className.includes("delete")) return "var(--bad)";
+        if (className.includes("use")) return "var(--keep)";
+        if (className.includes("skip")) return "#94a3b8";
+        if (className.includes("move")) return "var(--row)";
+        return "var(--read)";
+      }
+
+      async function flyTo(target, jump = false) {
+        if (!target) return;
+        const scanner = $("scanner");
+        const rect = target.getBoundingClientRect();
+        const x = rect.left + window.scrollX + rect.width / 2;
+        const y = rect.top + window.scrollY + rect.height / 2;
+        const start = scannerPosition || { x, y };
+        const midY = jump ? y - 42 : y;
+        const duration = (jump ? 460 : 320) * SPEED;
+        scanner.className = `scanner ${jump ? "jump" : "move"}`;
+        scanner.dataset.label = jump ? "SALTAR" : "MOVER";
+        scanner.style.opacity = 1;
+        scanner.animate(
+          [
+            { transform: `translate(${start.x}px, ${start.y}px)` },
+            { transform: `translate(${x}px, ${midY}px)` },
+            { transform: `translate(${x}px, ${y}px)` },
+          ],
+          { duration, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards" },
+        );
+        scanner.style.transform = `translate(${x}px, ${y}px)`;
+        scannerPosition = { x, y };
+        for (let i = 0; i < 6; i++) {
+          const dot = document.createElement("div");
+          dot.className = "trail";
+          dot.style.transform = `translate(${x + (Math.random() - 0.5) * 24}px, ${y + (Math.random() - 0.5) * 24}px)`;
+          dot.style.background = jump ? "var(--jump)" : "var(--row)";
+          document.body.append(dot);
+          setTimeout(() => dot.remove(), 600 * SPEED);
+        }
+        await wait(jump ? 460 : 320);
+      }
+
+      async function accessCell({
+        side,
+        row,
+        field,
+        state = "scan",
+        metric = "reads",
+        jump = false,
+        text = null,
+      }) {
+        const target = cell(side, row, field);
+        await flyTo(target, jump);
+        if (jump) {
+          stats[side].jumps += 1;
+          renderHud();
+          await wait(170);
+        }
+
+        const scanner = $("scanner");
+        const [className, label] = scannerVisualForState(state);
+        scanner.className = `scanner ${className}`;
+        scanner.dataset.label = label;
+        for (let i = 0; i < 5; i++) {
+          const dot = document.createElement("div");
+          dot.className = "trail";
+          const rect = target.getBoundingClientRect();
+          const x = rect.left + window.scrollX + rect.width / 2;
+          const y = rect.top + window.scrollY + rect.height / 2;
+          dot.style.transform = `translate(${x + (Math.random() - 0.5) * 18}px, ${y + (Math.random() - 0.5) * 18}px)`;
+          dot.style.background = trailColorForClass(scanner.className);
+          document.body.append(dot);
+          setTimeout(() => dot.remove(), 560 * SPEED);
+        }
+        await wait(
+          state === "scan"
+            ? 260
+            : state === "write" || state === "delete"
+              ? 330
+              : 180,
+        );
+        if (text !== null) target.textContent = text;
+        target.className = `cell ${state}`;
+        if (metric) {
+          stats[side][metric] += 1;
+          renderHud();
+        }
+      }
+
+      function step({
+        side = "SGBD",
+        phase,
+        metaSide,
+        meta,
+        text,
+        cells = [],
+        counters = [],
+        pause = 260,
+      }) {
+        return async () => {
+          activatePhase(phase);
+          activateMeta(metaSide, meta);
+          addLog(side, text);
+          for (const [counterSide, metric] of counters) {
+            stats[counterSide][metric] += 1;
+          }
+          if (counters.length) renderHud();
+          const resolvedCells = typeof cells === "function" ? cells() : cells;
+          for (const item of resolvedCells) {
+            await accessCell(item);
+          }
+          await wait(pause);
+        };
+      }
+
+      function commonSteps(sqlText, planText) {
+        return [
+          step({
+            phase: "client",
+            text: `Cliente envia SQL: ${sqlText}.`,
+            pause: 380,
+          }),
+          step({
+            phase: "parser",
+            text: "Parser cria a arvore SQL; binder resolve tabela, colunas, tipos e permissoes.",
+            pause: 560,
+          }),
+          step({
+            phase: "txn",
+            text: "Transacao recebe snapshot MVCC; leituras enxergam apenas versoes visiveis.",
+            pause: 520,
+          }),
+          step({
+            phase: "optimizer",
+            text: `Otimizador usa estatisticas/catalogo, estima custo e escolhe plano: ${planText}.`,
+            pause: 650,
+          }),
+          step({
+            phase: "executor",
+            text: "Executor inicia operadores do plano fisico e solicita dados ao buffer manager.",
+            pause: 430,
+          }),
+        ];
+      }
+
+      function buildPlan() {
+        const [_, sqlText] = ops[selected];
+        const steps = [];
+        const planText = {
+          aggregate:
+            "scan analitico; row-store varre linhas, column-store le segmento idade",
+          record: "busca por indice no id e materializacao do resultado",
+          insert:
+            "insercao com WAL, alocacao de espaco e atualizacao de indice/metadados",
+          update: "busca por id, WAL e escrita de nova versao/valor",
+          delete: "busca por id, WAL e marca de visibilidade/delete bitmap",
+        }[selected];
+        steps.push(...commonSteps(sqlText, planText));
+
+        if (selected === "aggregate") {
+          steps.push(
+            step({
+              side: "LIN",
+              phase: "optimizer",
+              metaSide: "row",
+              meta: "catalog",
+              text: "Catalogo informa estatisticas da tabela; a projecao pede so idade, mas a unidade fisica e a linha.",
+            }),
+            step({
+              side: "LIN",
+              phase: "buffer",
+              metaSide: "row",
+              meta: "buffer",
+              text: "Buffer manager fixa/pina paginas de dados; se nao estiverem em memoria, pede I/O ao storage.",
+            }),
+            step({
+              side: "LIN",
+              phase: "storage",
+              metaSide: "row",
+              meta: "buffer",
+              text: "Storage le paginas row-store: cada pagina carrega tuplas completas.",
+              cells: rowReadAll("scan"),
+            }),
+            step({
+              side: "LIN",
+              phase: "txn",
+              text: "Executor faz visibility check MVCC em cada tupla lida pelo snapshot atual.",
+              cells: rowDiscardExcept("idade"),
+            }),
+            step({
+              side: "LIN",
+              phase: "executor",
+              text: "Executor deforma a tupla, descarta colunas nao projetadas e alimenta AVG(idade).",
+              cells: rowKeepOnly("idade"),
+            }),
+            step({
+              side: "COL",
+              phase: "optimizer",
+              metaSide: "col",
+              meta: "catalog",
+              text: "Catalogo e estatisticas indicam que apenas o segmento idade e necessario.",
+            }),
+            step({
+              side: "COL",
+              phase: "buffer",
+              metaSide: "col",
+              meta: "zone",
+              text: "Zone map/dicionario localiza chunks da coluna idade e evita segmentos irrelevantes.",
+            }),
+            step({
+              side: "COL",
+              phase: "storage",
+              metaSide: "col",
+              meta: "buffer",
+              text: "Storage le so o vetor idade; IDs, nomes e cidades nao entram no I/O.",
+              cells: colReadField("idade"),
+            }),
+            step({
+              side: "COL",
+              phase: "txn",
+              text: "Visibility bitmap/snapshot remove posicoes invisiveis antes da agregacao.",
+              cells: colKeepField("idade"),
+            }),
+            step({
+              side: "COL",
+              phase: "executor",
+              text: "Executor vetorizado descomprime/processa o vetor idade e calcula AVG sem montar linhas.",
+              pause: 520,
+            }),
+          );
+        }
+
+        if (selected === "record") {
+          steps.push(
+            step({
+              side: "LIN",
+              phase: "optimizer",
+              metaSide: "row",
+              meta: "index",
+              text: "Indice B-tree resolve id=3 para a pagina que contem a tupla.",
+            }),
+            step({
+              side: "LIN",
+              phase: "buffer",
+              metaSide: "row",
+              meta: "buffer",
+              text: "Buffer manager fixa a pagina apontada pelo indice; se houver miss, storage faz a leitura.",
+            }),
+            step({
+              side: "LIN",
+              phase: "storage",
+              text: "Storage entrega a pagina; a tupla completa esta contigua na pagina row-store.",
+              cells: rowReadRecord(2),
+            }),
+            step({
+              side: "LIN",
+              phase: "txn",
+              text: "Visibility check confirma que a versao da tupla id=3 e visivel no snapshot.",
+              cells: rowKeepRecord(2),
+            }),
+            step({
+              side: "LIN",
+              phase: "executor",
+              text: "Executor materializa a linha inteira para retornar ao cliente.",
+              pause: 420,
+            }),
+            step({
+              side: "COL",
+              phase: "optimizer",
+              metaSide: "col",
+              meta: "zone",
+              text: "Colunar usa indice/zone map para encontrar a posicao ordinal do ID 3.",
+            }),
+            step({
+              side: "COL",
+              phase: "buffer",
+              metaSide: "col",
+              meta: "buffer",
+              text: "Buffer manager precisa fixar chunks de ID, nome, idade e cidade.",
+            }),
+            step({
+              side: "COL",
+              phase: "storage",
+              text: "Executor busca a mesma posicao em cada segmento de coluna; isso cria saltos/logica de gather.",
+              cells: colReadRecord(2),
+            }),
+            step({
+              side: "COL",
+              phase: "txn",
+              text: "Visibility bitmap valida se a posicao ainda esta viva para esse snapshot.",
+              cells: colKeepRecord(2),
+            }),
+            step({
+              side: "COL",
+              phase: "executor",
+              text: "Executor materializa valores separados em uma unica linha de resposta.",
+              pause: 420,
+            }),
+          );
+        }
+
+        if (selected === "insert") {
+          steps.push(
+            step({
+              side: "SGBD",
+              phase: "txn",
+              text: "Transacao abre em modo escrita; engine verifica restricoes e prepara locks/latches de pagina.",
+              pause: 500,
+            }),
+            step({
+              side: "SGBD",
+              phase: "wal",
+              text: "Write-ahead logging: o log da mudanca deve chegar ao WAL antes da pagina de dados ser considerada segura.",
+              pause: 520,
+            }),
+            step({
+              side: "LIN",
+              phase: "wal",
+              metaSide: "row",
+              meta: "wal",
+              text: "Row-store grava log da nova tupla completa.",
+              counters: [["row", "wal"]],
+              pause: 250,
+            }),
+            step({
+              side: "LIN",
+              phase: "buffer",
+              metaSide: "row",
+              meta: "buffer",
+              text: "Buffer manager escolhe pagina com espaco livre ou aloca nova pagina.",
+            }),
+            step({
+              side: "LIN",
+              phase: "storage",
+              metaSide: "row",
+              meta: "buffer",
+              text: "Executor monta a tupla inteira e grava em uma pagina row-store.",
+              cells: insertRowCells,
+            }),
+            step({
+              side: "LIN",
+              phase: "executor",
+              metaSide: "row",
+              meta: "index",
+              text: "Indice primario recebe chave id=5 apontando para a pagina/slot da nova tupla.",
+              pause: 440,
+            }),
+            step({
+              side: "COL",
+              phase: "wal",
+              metaSide: "col",
+              meta: "wal",
+              text: "Column-store grava WAL/delta para a linha nova.",
+              counters: [["col", "wal"]],
+              pause: 250,
+            }),
+            step({
+              side: "COL",
+              phase: "buffer",
+              metaSide: "col",
+              meta: "wal",
+              text: "Muitas engines colunares escrevem primeiro em delta-store/write buffer antes do merge para segmentos comprimidos.",
+            }),
+            step({
+              side: "COL",
+              phase: "storage",
+              metaSide: "col",
+              meta: "buffer",
+              text: "Cada atributo e anexado ao buffer/segmento da respectiva coluna.",
+              cells: insertColCells,
+            }),
+            step({
+              side: "SGBD",
+              phase: "wal",
+              text: "Commit força/ordena WAL conforme politica de durabilidade e torna a linha visivel.",
+              pause: 520,
+            }),
+          );
+        }
+
+        if (selected === "update") {
+          steps.push(
+            step({
+              side: "LIN",
+              phase: "optimizer",
+              metaSide: "row",
+              meta: "index",
+              text: "Indice localiza id=2 antes da alteracao.",
+            }),
+            step({
+              side: "LIN",
+              phase: "txn",
+              text: "Engine pega lock de escrita na linha ou cria nova versao conforme MVCC.",
+              pause: 360,
+            }),
+            step({
+              side: "LIN",
+              phase: "wal",
+              metaSide: "row",
+              meta: "wal",
+              text: "WAL registra valor antigo/novo antes de mexer na pagina.",
+              counters: [["row", "wal"]],
+              pause: 320,
+            }),
+            step({
+              side: "LIN",
+              phase: "buffer",
+              metaSide: "row",
+              meta: "buffer",
+              text: "Buffer manager fixa a pagina da tupla id=2.",
+            }),
+            step({
+              side: "LIN",
+              phase: "storage",
+              text: "Pagina da linha e trazida; idade e alterada na tupla ou em nova versao MVCC.",
+              cells: [
+                { side: "row", row: 1, field: "id", state: "scan" },
+                { side: "row", row: 1, field: "nome", state: "scan" },
+                {
+                  side: "row",
+                  row: 1,
+                  field: "idade",
+                  state: "write",
+                  metric: "writes",
+                  text: "31",
+                },
+              ],
+            }),
+            step({
+              side: "COL",
+              phase: "optimizer",
+              metaSide: "col",
+              meta: "zone",
+              text: "Colunar descobre a posicao da linha id=2.",
+            }),
+            step({
+              side: "COL",
+              phase: "txn",
+              text: "Engine bloqueia/logicamente versiona a posicao; demais colunas nao precisam ser reescritas.",
+              pause: 360,
+            }),
+            step({
+              side: "COL",
+              phase: "wal",
+              metaSide: "col",
+              meta: "wal",
+              text: "WAL/delta registra alteracao somente da coluna idade.",
+              counters: [["col", "wal"]],
+              pause: 320,
+            }),
+            step({
+              side: "COL",
+              phase: "storage",
+              text: "Somente o valor idade na posicao 2 e escrito no delta/segmento; outras colunas ficam intactas.",
+              cells: [
+                {
+                  side: "col",
+                  row: 1,
+                  field: "idade",
+                  state: "write",
+                  metric: "writes",
+                  jump: true,
+                  text: "31",
+                },
+              ],
+            }),
+            step({
+              side: "SGBD",
+              phase: "wal",
+              text: "Commit confirma a nova versao/valor.",
+              pause: 430,
+            }),
+          );
+        }
+
+        if (selected === "delete") {
+          steps.push(
+            step({
+              side: "LIN",
+              phase: "optimizer",
+              metaSide: "row",
+              meta: "index",
+              text: "Indice encontra a tupla id=4.",
+            }),
+            step({
+              side: "LIN",
+              phase: "txn",
+              text: "Engine pega lock de escrita ou cria marcador de delecao visivel so apos commit.",
+              pause: 360,
+            }),
+            step({
+              side: "LIN",
+              phase: "wal",
+              metaSide: "row",
+              meta: "wal",
+              text: "WAL registra remocao antes de alterar visibilidade.",
+              counters: [["row", "wal"]],
+              pause: 300,
+            }),
+            step({
+              side: "LIN",
+              phase: "buffer",
+              metaSide: "row",
+              meta: "buffer",
+              text: "Buffer manager fixa a pagina que contem a linha 4.",
+            }),
+            step({
+              side: "LIN",
+              phase: "storage",
+              text: "Row-store marca a tupla como apagada ou cria versao invisivel.",
+              cells: rowDeleteRecord(3),
+            }),
+            step({
+              side: "COL",
+              phase: "optimizer",
+              metaSide: "col",
+              meta: "zone",
+              text: "Colunar encontra a posicao do ID 4.",
+            }),
+            step({
+              side: "COL",
+              phase: "txn",
+              text: "Engine bloqueia/versiona a posicao ordinal, nao necessariamente todos os valores fisicos.",
+              pause: 360,
+            }),
+            step({
+              side: "COL",
+              phase: "wal",
+              metaSide: "col",
+              meta: "wal",
+              text: "WAL registra a remocao da posicao.",
+              counters: [["col", "wal"]],
+            }),
+            step({
+              side: "COL",
+              phase: "storage",
+              metaSide: "col",
+              meta: "buffer",
+              text: "Delete bitmap/visibilidade marca a posicao como removida para todos os segmentos.",
+              cells: colDeleteRecord(3),
+            }),
+            step({
+              side: "SGBD",
+              phase: "wal",
+              text: "Commit torna a remocao visivel; vacuum/merge pode limpar fisicamente depois.",
+              pause: 520,
+            }),
+          );
+        }
+
+        return steps;
+      }
+
+      function rowReadAll(state) {
+        const items = [];
+        for (let r = 0; r < rows.length; r++)
+          for (const f of fields)
+            items.push({ side: "row", row: r, field: f, state });
+        return items;
+      }
+
+      function rowDiscardExcept(fieldToKeep) {
+        const items = [];
+        for (let r = 0; r < rows.length; r++)
+          for (const f of fields)
+            items.push({
+              side: "row",
+              row: r,
+              field: f,
+              state: f === fieldToKeep ? "keep" : "skip",
+              metric: "",
+            });
+        return items;
+      }
+
+      function rowKeepOnly(fieldToKeep) {
+        const items = [];
+        for (let r = 0; r < rows.length; r++) {
+          items.push({
+            side: "row",
+            row: r,
+            field: fieldToKeep,
+            state: "keep",
+            metric: "",
+          });
+        }
+        return items;
+      }
+
+      function colReadField(field) {
+        return rows.map((_, r) => ({
+          side: "col",
+          row: r,
+          field,
+          state: "scan",
+        }));
+      }
+
+      function colKeepField(field) {
+        return rows.map((_, r) => ({
+          side: "col",
+          row: r,
+          field,
+          state: "keep",
+          metric: "",
+        }));
+      }
+
+      function rowReadRecord(row) {
+        return fields.map((f) => ({
+          side: "row",
+          row,
+          field: f,
+          state: "scan",
+        }));
+      }
+
+      function rowKeepRecord(row) {
+        return fields.map((f) => ({
+          side: "row",
+          row,
+          field: f,
+          state: "keep",
+          metric: "",
+        }));
+      }
+
+      function colReadRecord(row) {
+        return fields.map((f, index) => ({
+          side: "col",
+          row,
+          field: f,
+          state: "scan",
+          jump: index > 0,
+        }));
+      }
+
+      function colKeepRecord(row) {
+        return fields.map((f) => ({
+          side: "col",
+          row,
+          field: f,
+          state: "keep",
+          metric: "",
+        }));
+      }
+
+      function insertRowCells() {
+        rows = [
+          ...rowsBase,
+          { id: 5, nome: "Eva", idade: 28, cidade: "Salvador" },
+        ];
+        renderStores();
+        return fields.map((f) => ({
+          side: "row",
+          row: 4,
+          field: f,
+          state: "write",
+          metric: "writes",
+        }));
+      }
+
+      function insertColCells() {
+        return fields.map((f, index) => ({
+          side: "col",
+          row: 4,
+          field: f,
+          state: "write",
+          metric: "writes",
+          jump: index > 0,
+        }));
+      }
+
+      function rowDeleteRecord(row) {
+        return fields.map((f) => ({
+          side: "row",
+          row,
+          field: f,
+          state: "delete",
+          metric: "writes",
+        }));
+      }
+
+      function colDeleteRecord(row) {
+        return fields.map((f, index) => ({
+          side: "col",
+          row,
+          field: f,
+          state: "delete",
+          metric: "writes",
+          jump: index > 0,
+        }));
+      }
+
+      async function run() {
+        if (running) return;
+        running = true;
+        rows = [...rowsBase];
+        stats = emptyStats();
+        renderStores();
+        renderHud();
+        clearHighlights();
+        $("log").innerHTML = "";
+        $("rowResult").textContent = "Executando...";
+        $("colResult").textContent = "Executando...";
+        const steps = buildPlan();
+        for (let i = 0; i < steps.length; i++) {
+          $("bar").style.width =
+            `${Math.round(((i + 1) / steps.length) * 100)}%`;
+          await steps[i]();
+        }
+        activatePhase(null);
+        activateMeta(null, null);
+        $("rowResult").textContent = summaries[selected][0];
+        $("colResult").textContent = summaries[selected][1];
+        $("current").textContent =
+          "Simulacao concluida. O historico mostra o caminho completo da operacao no SGBD.";
+        running = false;
+      }
+
+      reset();
+    </script>
+  </body>
+</html>
